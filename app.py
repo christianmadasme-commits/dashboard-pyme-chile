@@ -1,196 +1,163 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
 from sklearn.cluster import KMeans
 import numpy as np
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN CORPORATIVA ---
-st.set_page_config(
-    page_title="InsightCorp | Analytics",
-    page_icon="🏢",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="Asistente Virtual PyME", layout="wide", page_icon="🤖")
 
-# Estilos CSS para apariencia profesional (Quita marcas de agua, mejora fuentes)
+# Estilos para que parezca una App nativa y amigable
 st.markdown("""
 <style>
-    .main {background-color: #f9f9f9;}
-    .metric-card {
-        background-color: #ffffff;
-        border-left: 5px solid #004aad;
-        padding: 20px;
-        border-radius: 5px;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
-    }
-    h1 {color: #002b5e;}
-    h2, h3 {color: #004aad;}
+    .big-font {font-size:20px !important; color: #333;}
+    .action-card {background-color: #e8f4f8; padding: 15px; border-radius: 10px; border-left: 5px solid #00a8cc; margin-bottom: 10px;}
+    .alert-card {background-color: #ffebee; padding: 15px; border-radius: 10px; border-left: 5px solid #ff5252; margin-bottom: 10px;}
+    .success-card {background-color: #e8f5e9; padding: 15px; border-radius: 10px; border-left: 5px solid #4caf50; margin-bottom: 10px;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. MOTORES DE INTELIGENCIA ARTIFICIAL ---
+# --- MOTORES DE INTELIGENCIA (Backend) ---
 
 def motor_proyeccion(df, fecha_col, venta_col, dias=30):
-    """Motor 1: Predicción Lineal (Forecasting)"""
     if len(df) < 2: return df, 0
-    
     df_reg = df.copy()
     df_reg['fecha_num'] = df_reg[fecha_col].map(pd.Timestamp.toordinal)
     model = LinearRegression()
     model.fit(df_reg[['fecha_num']], df_reg[venta_col])
-    
     futuro = [df[fecha_col].max() + pd.Timedelta(days=x) for x in range(1, dias+1)]
     futuro_num = np.array([t.toordinal() for t in futuro]).reshape(-1, 1)
     prediccion = model.predict(futuro_num)
-    
     df_proy = pd.DataFrame({fecha_col: futuro, venta_col: prediccion, 'Tipo': 'Proyección'})
     df['Tipo'] = 'Histórico'
     return pd.concat([df, df_proy], ignore_index=True), model.coef_[0]
 
-def motor_segmentacion(df, col_cliente, col_venta):
-    """Motor 2: Clustering de Clientes (K-Means)"""
-    # Agrupar datos por cliente
-    rfm = df.groupby(col_cliente)[col_venta].agg(['sum', 'count', 'mean']).reset_index()
-    rfm.columns = ['Cliente', 'Total_Venta', 'Frecuencia', 'Ticket_Promedio']
+def motor_segmentacion_accionable(df, col_cliente, col_venta, col_fecha):
+    # Crear RFM (Recencia, Frecuencia, Monto)
+    # Recencia: ¿Hace cuántos días fue su última compra?
+    fecha_max = df[col_fecha].max()
+    rfm = df.groupby(col_cliente).agg({
+        col_fecha: lambda x: (fecha_max - x.max()).days,
+        col_venta: ['sum', 'count']
+    }).reset_index()
     
-    if len(rfm) < 3: return rfm # Necesitamos al menos 3 clientes para clusterizar
+    rfm.columns = ['Cliente', 'Dias_sin_venir', 'Total_Venta', 'Frecuencia']
+    rfm['Ticket_Promedio'] = rfm['Total_Venta'] / rfm['Frecuencia']
     
-    # Aplicar K-Means (Inteligencia no supervisada)
+    if len(rfm) < 3: return rfm # Protección contra pocos datos
+    
+    # K-Means para agrupar por VALOR (Venta)
     kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-    rfm['Cluster'] = kmeans.fit_predict(rfm[['Total_Venta']])
+    rfm['Cluster_Valor'] = kmeans.fit_predict(rfm[['Total_Venta']])
     
-    # Asignar etiquetas legibles según el promedio de venta del cluster
-    centroides = rfm.groupby('Cluster')['Total_Venta'].mean().sort_values(ascending=False).index
-    mapa_etiquetas = {centroides[0]: '🥇 Cliente VIP', centroides[1]: '🥈 Cliente Estándar', centroides[2]: '🥉 Cliente Ocasional'}
-    rfm['Segmento'] = rfm['Cluster'].map(mapa_etiquetas)
+    # Ordenar clusters para saber cuál es el VIP (el de mayor venta promedio)
+    ranking = rfm.groupby('Cluster_Valor')['Total_Venta'].mean().sort_values(ascending=False).index
+    mapa = {ranking[0]: 'VIP', ranking[1]: 'Regular', ranking[2]: 'Bajo'}
+    rfm['Categoria'] = rfm['Cluster_Valor'].map(mapa)
+    
+    # Lógica de NEGOCIO (Aquí está el cerebro del consultor)
+    # Definimos "Riesgo de Fuga" si no viene hace más de X días (ej: 60 días)
+    # Ajustable según el negocio, aquí usamos la media + desv estándar
+    limite_fuga = rfm['Dias_sin_venir'].mean() 
+    
+    rfm['Estado'] = 'Activo'
+    rfm.loc[rfm['Dias_sin_venir'] > limite_fuga, 'Estado'] = 'En Riesgo ⚠️'
+    rfm.loc[rfm['Dias_sin_venir'] > (limite_fuga * 2), 'Estado'] = 'Perdido ❌'
     
     return rfm
 
-def generar_reporte_escrito(total_venta, pendiente, top_cliente, segmento_top):
-    """Motor 3: Generación de Lenguaje Natural (Recomendaciones)"""
-    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-    tendencia = "positiva y en crecimiento" if pendiente > 0 else "negativa, requiriendo atención inmediata"
-    accion = "invertir en inventario" if pendiente > 0 else "reducir costos operativos y revisar precios"
-    
-    texto = f"""
-    **INFORME EJECUTIVO DE INTELIGENCIA DE NEGOCIOS**
-    *Fecha de emisión: {fecha_hoy}*
-    
-    **1. Diagnóstico General:**
-    La empresa presenta una facturación total analizada de **${total_venta:,.0f}**. 
-    Nuestros modelos predictivos indican que la tendencia actual es **{tendencia}**.
-    
-    **2. Análisis de Cartera (IA):**
-    El algoritmo de segmentación ha identificado a **{top_cliente}** como el actor más relevante 
-    de su cartera (Categoría: {segmento_top}). La dependencia de este segmento sugiere fidelizar 
-    a los clientes 'Estándar' para migrarlos a categoría VIP.
-    
-    **3. Recomendación Estratégica:**
-    Basado en la proyección a 30 días, se recomienda **{accion}**. 
-    Se sugiere monitorear los costos logísticos asociados al segmento 'Ocasional' para optimizar márgenes.
-    """
-    return texto
+# --- INTERFAZ (Frontend) ---
 
-# --- 3. INTERFAZ DE USUARIO (FRONTEND) ---
+st.title("🤖 Tu Asistente de Negocios")
+st.markdown("Suba sus datos y le diré exactamente **qué hacer esta semana**.")
 
-st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1055/1055644.png", width=80)
-st.sidebar.title("InsightCorp")
-st.sidebar.markdown("**Suite de Análisis Financiero v4.0**")
-st.sidebar.markdown("---")
-
-uploaded_file = st.sidebar.file_uploader("📂 Cargar Data (Excel/CSV)", type=["xlsx", "csv"])
+uploaded_file = st.sidebar.file_uploader("📂 Cargar Excel/CSV", type=["xlsx", "csv"])
 
 if uploaded_file:
-    # Carga y Limpieza
-    try:
-        if uploaded_file.name.endswith('.csv'): df = pd.read_csv(uploaded_file)
-        else: df = pd.read_excel(uploaded_file)
+    if uploaded_file.name.endswith('.csv'): df = pd.read_csv(uploaded_file)
+    else: df = pd.read_excel(uploaded_file)
+    
+    # Detección de columnas
+    col_fecha = next((c for c in df.columns if 'fecha' in c.lower()), None)
+    col_total = next((c for c in df.columns if any(x in c.lower() for x in ['total', 'monto', 'venta'])), None)
+    col_cliente = next((c for c in df.columns if any(x in c.lower() for x in ['cliente', 'empresa', 'razon'])), None)
+
+    if col_fecha and col_total and col_cliente:
+        df[col_fecha] = pd.to_datetime(df[col_fecha])
         
-        # Detección de columnas
-        cols = [c.lower() for c in df.columns]
-        col_fecha = next((c for c in df.columns if 'fecha' in c.lower()), None)
-        col_total = next((c for c in df.columns if any(x in c.lower() for x in ['total', 'monto', 'venta'])), None)
-        col_cliente = next((c for c in df.columns if any(x in c.lower() for x in ['cliente', 'empresa', 'razon'])), None)
+        # Ejecutar Motores
+        rfm_data = motor_segmentacion_accionable(df, col_cliente, col_total, col_fecha)
+        df_proy, pendiente = motor_proyeccion(df, col_fecha, col_total)
         
-        if col_fecha and col_total:
-            df[col_fecha] = pd.to_datetime(df[col_fecha])
-            df = df.sort_values(by=col_fecha)
-
-            # --- DASHBOARD PRINCIPAL ---
-            st.title(f"📊 Reporte de Gestión: {uploaded_file.name}")
+        # --- TABLERO DE ACCIÓN ---
+        tab1, tab2, tab3 = st.tabs(["📋 Lista de Tareas", "🚦 Semáforo de Clientes", "🔮 Futuro"])
+        
+        with tab1:
+            st.header("¿Qué debo hacer hoy?")
+            st.markdown("Basado en el análisis de sus datos, la Inteligencia Artificial recomienda:")
             
-            # KPIs Top
-            tot_venta = df[col_total].sum()
-            prom_venta = df[col_total].mean()
-            delta_mes = 12.5 # Simulado para efecto visual
+            # 1. Estrategia de Recuperación (Clientes VIP en Riesgo)
+            vip_riesgo = rfm_data[(rfm_data['Categoria'] == 'VIP') & (rfm_data['Estado'] != 'Activo')]
             
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Ingresos Totales", f"${tot_venta:,.0f}", f"+{delta_mes}% vs mes ant")
-            c2.metric("Ticket Promedio", f"${prom_venta:,.0f}", "-2.1% Margen")
-            c3.metric("Operaciones Registradas", len(df), "Datos actualizados")
-            
-            st.markdown("---")
-            
-            # PESTAÑAS CORPORATIVAS
-            tab1, tab2, tab3 = st.tabs(["📈 Proyección IA", "👥 Segmentación de Clientes", "📝 Informe Ejecutivo"])
-            
-            with tab1:
-                st.subheader("Modelo Predictivo de Flujo de Caja")
-                df_proy, pendiente = motor_proyeccion(df, col_fecha, col_total)
-                fig_proy = px.line(df_proy, x=col_fecha, y=col_total, color='Tipo',
-                                   color_discrete_map={"Histórico": "#004aad", "Proyección": "#00d4ff"},
-                                   title="Tendencia Histórica + Proyección 30 días")
-                fig_proy.update_layout(plot_bgcolor="white")
-                st.plotly_chart(fig_proy, use_container_width=True)
-            
-            with tab2:
-                if col_cliente:
-                    st.subheader("Clustering de Cartera (Algoritmo K-Means)")
-                    st.info("La IA agrupa a sus clientes automáticamente según comportamiento de compra.")
-                    
-                    df_seg = motor_segmentacion(df, col_cliente, col_total)
-                    
-                    col_izq, col_der = st.columns([2,1])
-                    with col_izq:
-                        fig_scatter = px.scatter(df_seg, x='Total_Venta', y='Frecuencia', 
-                                                 color='Segmento', size='Ticket_Promedio',
-                                                 hover_name='Cliente',
-                                                 color_discrete_map={'🥇 Cliente VIP': '#FFD700', '🥈 Cliente Estándar': '#C0C0C0', '🥉 Cliente Ocasional': '#CD7F32'},
-                                                 title="Matriz de Valor de Clientes")
-                        st.plotly_chart(fig_scatter, use_container_width=True)
-                    with col_der:
-                        st.dataframe(df_seg[['Cliente', 'Segmento', 'Total_Venta']].sort_values('Total_Venta', ascending=False), hide_index=True)
-                else:
-                    st.warning("Se requiere columna 'Cliente' para segmentación.")
-
-            with tab3:
-                st.subheader("Generación Automática de Reporte")
-                # Preparar datos para el reporte
-                top_cliente_nombre = "N/A"
-                segmento_top = "N/A"
-                if col_cliente:
-                    df_seg = motor_segmentacion(df, col_cliente, col_total)
-                    top_row = df_seg.sort_values('Total_Venta', ascending=False).iloc[0]
-                    top_cliente_nombre = top_row['Cliente']
-                    segmento_top = top_row['Segmento']
+            if not vip_riesgo.empty:
+                st.markdown(f"""<div class="alert-card">
+                    <b>🚨 URGENTE: Recuperar Clientes VIP</b><br>
+                    Tienes {len(vip_riesgo)} clientes importantes que han dejado de comprar. 
+                    Si no los llamas hoy, podrías perder <b>${vip_riesgo['Total_Venta'].sum()*0.2:,.0f}</b> al mes.
+                    </div>""", unsafe_allow_html=True)
                 
-                texto_reporte = generar_reporte_escrito(tot_venta, pendiente, top_cliente_nombre, segmento_top)
-                
-                st.markdown("""<div style="background-color: white; padding: 30px; border: 1px solid #ddd; border-radius: 10px;">""", unsafe_allow_html=True)
-                st.markdown(texto_reporte)
-                st.markdown("""</div>""", unsafe_allow_html=True)
-                
-                st.download_button("📥 Descargar Reporte PDF", data=texto_reporte, file_name="Reporte_Gerencial.txt")
+                with st.expander("Ver lista de teléfonos para llamar ahora"):
+                    st.table(vip_riesgo[['Cliente', 'Dias_sin_venir', 'Total_Venta']].sort_values('Total_Venta', ascending=False))
+            else:
+                st.success("✅ ¡Excelente! Tus clientes VIP están todos activos.")
 
-        else:
-            st.error("Error de formato: No encontramos columnas de Fecha o Monto.")
-    except Exception as e:
-        st.error(f"Error procesando archivo: {e}")
+            # 2. Estrategia de Desarrollo (Clientes Regulares que pueden ser VIP)
+            potenciales = rfm_data[(rfm_data['Categoria'] == 'Regular') & (rfm_data['Frecuencia'] > rfm_data['Frecuencia'].mean())]
+            
+            if not potenciales.empty:
+                st.markdown(f"""<div class="action-card">
+                    <b>💰 OPORTUNIDAD: Convertir a VIP</b><br>
+                    Estos {len(potenciales)} clientes compran seguido pero montos medios. 
+                    <b>Recomendación:</b> Ofrecerles un descuento por volumen para subir su ticket.
+                    </div>""", unsafe_allow_html=True)
+                st.dataframe(potenciales[['Cliente', 'Frecuencia', 'Ticket_Promedio']])
 
+        with tab2:
+            st.subheader("Estado de tu Cartera")
+            c1, c2 = st.columns([3, 1])
+            
+            with c1:
+                # Gráfico interactivo fácil de entender
+                fig = px.scatter(rfm_data, x='Dias_sin_venir', y='Total_Venta', 
+                                 color='Categoria', size='Ticket_Promedio',
+                                 hover_name='Cliente', text='Cliente',
+                                 color_discrete_map={'VIP': '#FFD700', 'Regular': '#87CEEB', 'Bajo': '#C0C0C0'},
+                                 title="Mapa de Clientes (Arriba=Compran Mucho | Derecha=Hace mucho no vienen)")
+                # Añadir líneas de referencia
+                fig.add_vline(x=rfm_data['Dias_sin_venir'].mean(), line_dash="dash", annotation_text="Alerta de Fuga")
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with c2:
+                st.write("**Resumen:**")
+                st.write(rfm_data['Categoria'].value_counts())
+                st.write("**Estado:**")
+                st.write(rfm_data['Estado'].value_counts())
+
+        with tab3:
+            st.subheader("Proyección Simple")
+            tendencia = "SUBIENDO 🚀" if pendiente > 0 else "BAJANDO 📉"
+            color_t = "green" if pendiente > 0 else "red"
+            
+            st.markdown(f"Tus ventas están: **:{color_t}[{tendencia}]**")
+            st.markdown("La línea punteada muestra hacia dónde vas si no haces cambios.")
+            
+            fig_p = px.line(df_proy, x=col_fecha, y=col_total, color='Tipo',
+                            color_discrete_map={"Histórico": "gray", "Proyección": color_t})
+            st.plotly_chart(fig_p, use_container_width=True)
+
+    else:
+        st.error("Faltan datos. Necesito columnas que digan: Fecha, Cliente y Total.")
 else:
-    st.info("Esperando carga de datos corporativos...")
-    # Generar datos demo para que se vea bonito al inicio
-    # (Oculto en producción, útil para demo)
+    st.info("Sube tu Excel para que el Asistente analice tu negocio.")
