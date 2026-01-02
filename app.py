@@ -1,138 +1,172 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
-import numpy as np
 from fpdf import FPDF
-from datetime import datetime
+import numpy as np
 
-# --- 1. CONFIGURACIÓN VISUAL PREMIUM (CSS) ---
-st.set_page_config(page_title="Growth Partner AI", layout="wide", page_icon="🚀")
+# --- 1. CONFIGURACIÓN VISUAL BLINDADA (CSS) ---
+st.set_page_config(page_title="Growth AI | Partner", layout="wide", page_icon="✨")
 
-# Inyección de CSS para diseño moderno
 st.markdown("""
 <style>
-    .stApp {background-color: #f4f6f9;}
-    .css-1r6slb0 {background-color: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
-    div[data-testid="stMetricValue"] {font-size: 28px; color: #004aad; font-weight: bold;}
-    div[data-testid="stMetricLabel"] {font-size: 14px; color: #666;}
-    h1 {color: #1a202c; font-family: 'Helvetica Neue', sans-serif;}
-    h2 {color: #2d3748;}
-    h3 {color: #004aad;}
-    .stButton>button {
-        background-color: #004aad; color: white; border-radius: 8px; border: none; padding: 10px 24px;
-        transition: all 0.3s ease;
+    /* 1. FORZAR VARIABLES DE COLOR GLOBALES (Gana al Modo Oscuro) */
+    :root {
+        --primary-color: #1A2980;
+        --background-color: #f0f2f5;
+        --secondary-background-color: #ffffff;
+        --text-color: #1f1f1f;
+        --font: 'Inter', sans-serif;
     }
-    .stButton>button:hover {background-color: #003380; transform: scale(1.02);}
+
+    /* 2. FONDO GENERAL */
+    [data-testid="stAppViewContainer"] {
+        background-color: var(--background-color) !important;
+        color: var(--text-color) !important;
+    }
+    
+    [data-testid="stHeader"] {
+        background: transparent !important;
+    }
+
+    /* 3. SIDEBAR (Barra Lateral) */
+    [data-testid="stSidebar"] {
+        background-color: var(--secondary-background-color) !important;
+        border-right: 1px solid #e0e0e0;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label {
+        color: #333333 !important; /* Texto oscuro forzado en sidebar */
+    }
+
+    /* 4. TARJETAS DE MÉTRICAS (Glassmorphism) */
+    div[data-testid="metric-container"] {
+        background-color: #ffffff !important;
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #666666 !important;
+    }
+    div[data-testid="stMetricValue"] {
+        color: #1A2980 !important;
+        font-size: 28px !important;
+    }
+
+    /* 5. BOTONES VIBRANTES (Gradiente) */
+    div.stButton > button {
+        background: linear-gradient(90deg, #1A2980 0%, #26D0CE 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 25px !important;
+        padding: 12px 28px !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 15px rgba(26, 41, 128, 0.2) !important;
+        transition: transform 0.2s;
+    }
+    div.stButton > button:hover {
+        transform: scale(1.03);
+    }
+
+    /* 6. PESTAÑAS Y TEXTOS */
+    h1, h2, h3 { color: #1f1f1f !important; }
+    p, li { color: #4a4a4a !important; }
+    
+    .custom-card {
+        background-color: white !important;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+        color: #333 !important;
+    }
+    
+    /* Arreglo para el texto del File Uploader */
+    [data-testid="stFileUploader"] label {
+        color: #333 !important;
+    }
+    [data-testid="stFileUploader"] {
+        background-color: white !important;
+        padding: 20px; 
+        border-radius: 10px;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. MOTORES DE LÓGICA DE NEGOCIO ---
+# --- 2. MOTORES (Lógica igual, solo limpieza interna) ---
 
 def motor_marketing(industria, ticket_promedio):
     plan = {}
     if industria == "Transporte / Logística":
-        plan['Canales'] = ["Google Ads (Palabras Clave: 'Fletes', 'Carga')", "Email a Jefes de Bodega", "LinkedIn B2B"]
-        plan['Mensaje'] = "Seguridad, Puntualidad y Flota Renovada."
+        plan['Canales'] = ["Google Ads (B2B)", "Email Directo", "LinkedIn"]
+        plan['Mensaje'] = "Seguridad y Puntualidad Certificada."
         plan['Costo_Lead_Est'] = 15000 
         plan['Conversion_Est'] = 0.10  
     elif industria == "Retail / Comercio":
-        plan['Canales'] = ["Instagram Ads (Reels)", "TikTok (Tendencias)", "Email Marketing (Carritos abandonados)"]
-        plan['Mensaje'] = "Oferta Flash, Escasez (Solo por hoy) y Envío Gratis."
+        plan['Canales'] = ["Instagram Ads", "TikTok", "Google Shopping"]
+        plan['Mensaje'] = "Ofertas Flash 24h."
         plan['Costo_Lead_Est'] = 3000
         plan['Conversion_Est'] = 0.05
     elif industria == "Agro / Alimentos":
-        plan['Canales'] = ["Facebook Groups Locales", "WhatsApp Business", "Radio Local"]
-        plan['Mensaje'] = "Frescura, Directo del Productor, Precios Mayoristas."
+        plan['Canales'] = ["Facebook Local", "WhatsApp", "Radio"]
+        plan['Mensaje'] = "Directo del Productor."
         plan['Costo_Lead_Est'] = 5000
         plan['Conversion_Est'] = 0.20
     else: 
-        plan['Canales'] = ["Google Maps (SEO Local)", "Referidos (Boca a Boca digital)"]
-        plan['Mensaje'] = "Confianza, Experiencia y Garantía."
+        plan['Canales'] = ["Google SEO", "Referidos", "Blog"]
+        plan['Mensaje'] = "Experiencia Garantizada."
         plan['Costo_Lead_Est'] = 8000
         plan['Conversion_Est'] = 0.15
     return plan
 
 def generar_pdf_premium(df, industria, marketing_plan, total_venta, tendencia_texto):
-    # NOTA: Recibimos 'tendencia_texto' que NO tiene emojis para evitar el error
     pdf = FPDF()
     pdf.add_page()
-    
-    # Header
-    pdf.set_fill_color(0, 74, 173) 
+    pdf.set_fill_color(26, 41, 128) 
     pdf.rect(0, 0, 210, 40, 'F')
     pdf.set_text_color(255, 255, 255)
     pdf.set_font('Arial', 'B', 20)
     pdf.set_xy(10, 15)
     pdf.cell(0, 10, 'PLAN ESTRATEGICO DE CRECIMIENTO', 0, 1, 'C')
-    
-    # Reset colores
     pdf.set_text_color(0, 0, 0)
     pdf.set_y(50)
-    
-    # Sección 1: Diagnóstico
     pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, f'1. Diagnostico Financiero ({industria})', 0, 1) # Quitamos tilde para seguridad máxima
+    pdf.cell(0, 10, f'1. Diagnostico Financiero ({industria})', 0, 1) 
     pdf.set_font('Arial', '', 11)
-    
-    # Limpiamos el texto de cualquier caracter extraño antes de escribir
-    texto_diagnostico = f"La empresa ha facturado ${total_venta:,.0f}. La tendencia actual es {tendencia_texto}. Se detectan oportunidades de optimizacion."
-    # Reemplazamos caracteres problemáticos por seguridad
-    texto_diagnostico = texto_diagnostico.replace("ó", "o").replace("ñ", "n").replace("í", "i")
-    
-    pdf.multi_cell(0, 7, texto_diagnostico)
+    texto_limpio = f"Facturacion Total: ${total_venta:,.0f}. Tendencia: {tendencia_texto}."
+    texto_limpio = texto_limpio.replace("ó", "o").replace("ñ", "n").replace("í", "i")
+    pdf.multi_cell(0, 7, texto_limpio)
     pdf.ln(5)
     
-    # Sección 2: Plan de Marketing
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, '2. Estrategia de Marketing Recomendada', 0, 1)
-    pdf.set_font('Arial', '', 11)
-    
-    canales_str = ', '.join(marketing_plan['Canales']).replace("ñ", "n").replace("ó", "o")
-    mensaje_str = marketing_plan['Mensaje'].replace("ñ", "n").replace("ó", "o")
-    
-    pdf.multi_cell(0, 8, f"Canales Prioritarios: {canales_str}")
-    pdf.multi_cell(0, 8, f"Eje de Comunicacion: {mensaje_str}")
-    pdf.ln(5)
-    
-    # Sección 3: Tabla
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, '3. Escenario de Inversion Publicitaria', 0, 1)
-    
+    # Tabla simple
     pdf.set_fill_color(240, 240, 240)
     pdf.set_font('Arial', 'B', 10)
-    pdf.cell(60, 10, 'Inversion Mensual (CLP)', 1, 0, 'C', 1)
-    pdf.cell(60, 10, 'Leads Estimados', 1, 0, 'C', 1)
-    pdf.cell(60, 10, 'Ventas Proyectadas', 1, 1, 'C', 1)
-    
+    pdf.cell(60, 10, 'Inversion (CLP)', 1, 0, 'C', 1)
+    pdf.cell(60, 10, 'Leads', 1, 0, 'C', 1)
+    pdf.cell(60, 10, 'Ventas Est.', 1, 1, 'C', 1)
     pdf.set_font('Arial', '', 10)
     inversion = 100000
-    costo = marketing_plan['Costo_Lead_Est']
-    conv = marketing_plan['Conversion_Est']
-    leads = int(inversion / costo)
-    ventas = int(leads * conv)
-    
+    leads = int(inversion / marketing_plan['Costo_Lead_Est'])
+    ventas = int(leads * marketing_plan['Conversion_Est'])
     pdf.cell(60, 10, f"${inversion:,.0f}", 1, 0, 'C')
-    pdf.cell(60, 10, f"{leads} potenciales", 1, 0, 'C')
-    pdf.cell(60, 10, f"{ventas} cierres", 1, 1, 'C')
+    pdf.cell(60, 10, str(leads), 1, 0, 'C')
+    pdf.cell(60, 10, str(ventas), 1, 1, 'C')
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 3. INTERFAZ PRINCIPAL ---
+# --- 3. INTERFAZ ---
 
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=60)
-    st.header("Configuración")
+    st.image("https://cdn-icons-png.flaticon.com/512/1067/1067357.png", width=70)
+    st.markdown("### Configuración")
     uploaded_file = st.file_uploader("Subir Datos", type=["xlsx", "csv"])
     st.markdown("---")
-    st.subheader("Perfil de la Empresa")
-    industria = st.selectbox("Industria / Rubro", 
-                             ["Transporte / Logística", "Retail / Comercio", "Agro / Alimentos", "Servicios Profesionales"])
-    presupuesto = st.slider("Presupuesto Marketing (CLP)", 50000, 1000000, 150000, step=50000)
+    industria = st.selectbox("Industria", ["Transporte / Logística", "Retail / Comercio", "Agro / Alimentos", "Servicios Profesionales"])
+    presupuesto = st.slider("Presupuesto (CLP)", 50000, 2000000, 250000, step=50000)
 
-st.title("🚀 Growth Partner: Inteligencia de Negocios")
-st.markdown("Transformamos datos en **acciones reales de venta**.")
+st.title("Growth AI Partner 🚀")
+st.markdown("##### Inteligencia de Negocios y Marketing")
 
 if uploaded_file:
     if uploaded_file.name.endswith('.csv'): df = pd.read_csv(uploaded_file)
@@ -144,83 +178,52 @@ if uploaded_file:
     if col_fecha and col_total:
         df[col_fecha] = pd.to_datetime(df[col_fecha])
         df = df.sort_values(by=col_fecha)
-        
         total_venta = df[col_total].sum()
-        ticket_promedio = df[col_total].mean()
         
+        # Proyección
         df['fecha_num'] = df[col_fecha].map(pd.Timestamp.toordinal)
         reg = LinearRegression().fit(df[['fecha_num']], df[col_total])
-        
-        # --- AQUÍ ESTÁ EL ARREGLO ---
-        # Creamos dos variables: una con emoji para la pantalla, otra limpia para el PDF
-        if reg.coef_[0] > 0:
-            tendencia_visual = "ALCISTA 🟢"
-            tendencia_texto = "ALCISTA" 
-        else:
-            tendencia_visual = "BAJISTA 🔴"
-            tendencia_texto = "BAJISTA"
-        
-        # --- TABLERO VISUAL ---
-        st.markdown("### 📊 Estado Actual")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Venta Total", f"${total_venta:,.0f}")
-        c2.metric("Ticket Promedio", f"${ticket_promedio:,.0f}")
-        c3.metric("Tendencia", tendencia_visual) # Aquí usamos la visual
-        c4.metric("Industria", industria.split("/")[0])
+        tendencia_txt = "ALCISTA" if reg.coef_[0] > 0 else "BAJISTA"
+        tendencia_icon = "↗️ CRECIENDO" if reg.coef_[0] > 0 else "↘️ CAYENDO"
+
+        # Métricas
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Ventas Totales", f"${total_venta:,.0f}")
+        c2.metric("Tendencia", tendencia_icon)
+        c3.metric("Industria", industria.split("/")[0])
         st.markdown("---")
         
-        tab_mkt, tab_adv, tab_rep = st.tabs(["📢 Plan de Marketing", "📈 Proyección de Campañas", "📄 Reporte Final"])
+        # Pestañas
+        tab1, tab2 = st.tabs(["📢 Estrategia", "📄 Reporte PDF"])
         
-        marketing_plan = motor_marketing(industria, ticket_promedio)
+        plan = motor_marketing(industria, df[col_total].mean())
         
-        with tab_mkt:
-            st.subheader(f"Estrategia Recomendada para {industria}")
-            col_izq, col_der = st.columns([1, 1])
-            with col_izq:
+        with tab1:
+            col_a, col_b = st.columns([1.5, 1])
+            with col_a:
                 st.markdown(f"""
-                <div class="css-1r6slb0">
-                    <h4>🎯 Dónde invertir tu dinero</h4>
-                    <ul>{''.join([f'<li>{c}</li>' for c in marketing_plan['Canales']])}</ul>
-                    <br><h4>🗣️ Qué decir (Copywriting)</h4>
-                    <p><i>"{marketing_plan['Mensaje']}"</i></p>
-                </div>""", unsafe_allow_html=True)
-            with col_der:
-                labels = marketing_plan['Canales']
-                values = [50, 30, 20]
-                fig = px.pie(values=values, names=labels, title="Distribución de Presupuesto", hole=0.4)
-                st.plotly_chart(fig, use_container_width=True)
+                <div class="custom-card">
+                    <h3 style="margin-top:0; color:#1A2980">Estrategia Recomendada</h3>
+                    <p><b>Canales:</b> {', '.join(plan['Canales'])}</p>
+                    <p><b>Mensaje Clave:</b> <i>"{plan['Mensaje']}"</i></p>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_b:
+                # Simulador rápido
+                leads = int(presupuesto / plan['Costo_Lead_Est'])
+                st.markdown(f"""
+                <div class="custom-card" style="text-align:center; background:#e8f5e9 !important;">
+                    <h2 style="color:#2e7d32; margin:0;">{leads}</h2>
+                    <p>Clientes Potenciales con tu presupuesto</p>
+                </div>
+                """, unsafe_allow_html=True)
 
-        with tab_adv:
-            st.subheader("💡 Simulador de Retorno de Inversión (ROI)")
-            st.info("Mueve el deslizador de presupuesto en la barra lateral para recalcular.")
-            costo_lead = marketing_plan['Costo_Lead_Est']
-            tasa_cierre = marketing_plan['Conversion_Est']
-            leads_estimados = int(presupuesto / costo_lead)
-            ventas_estimadas = int(leads_estimados * tasa_cierre)
-            retorno_estimado = ventas_estimadas * ticket_promedio
+        with tab2:
+            st.write("Descarga el plan formal:")
+            pdf_bytes = generar_pdf_premium(df, industria, plan, total_venta, tendencia_txt)
+            st.download_button("📥 Descargar PDF", data=pdf_bytes, file_name="Plan.pdf", mime="application/pdf")
             
-            c_a, c_b, c_c = st.columns(3)
-            c_a.markdown(f"""<div style="text-align:center; padding:10px; border:1px solid #ddd; border-radius:10px;">
-                <h3 style="color:#004aad">{leads_estimados}</h3><p>Clientes Potenciales</p></div>""", unsafe_allow_html=True)
-            c_b.markdown(f"""<div style="text-align:center; padding:10px; border:1px solid #ddd; border-radius:10px; background-color:#e6f4ea;">
-                <h3 style="color:#1e8e3e">{ventas_estimadas}</h3><p>Ventas Cerradas Est.</p></div>""", unsafe_allow_html=True)
-            c_c.markdown(f"""<div style="text-align:center; padding:10px; border:1px solid #ddd; border-radius:10px;">
-                <h3 style="color:#333">${retorno_estimado:,.0f}</h3><p>Retorno Esperado</p></div>""", unsafe_allow_html=True)
-
-        with tab_rep:
-            st.subheader("Descargar Plan Estratégico")
-            st.write("Obtén este análisis en un documento formal.")
-            
-            # Pasamos la variable 'tendencia_texto' (la limpia) al generador de PDF
-            pdf_bytes = generar_pdf_premium(df, industria, marketing_plan, total_venta, tendencia_texto)
-            
-            st.download_button(
-                label="📥 Descargar Estrategia en PDF",
-                data=pdf_bytes,
-                file_name=f"Estrategia_{industria.split()[0]}.pdf",
-                mime="application/pdf"
-            )
     else:
-        st.error("Formato de archivo no reconocido. Asegúrate de tener columnas Fecha y Monto.")
+        st.error("El archivo debe tener columnas 'Fecha' y 'Monto'.")
 else:
-    st.info("👈 Selecciona la industria y sube el archivo para comenzar.")
+    st.info("👈 Sube tu archivo para ver la magia.")
